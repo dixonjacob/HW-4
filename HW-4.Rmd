@@ -24,9 +24,9 @@ suppressPackageStartupMessages(library(leaflet))
 Please indicate
 
 * Who you collaborated with:Alison Cook
-* Roughly how much time you spent on this HW: 8h
-* What gave you the most trouble: Lots of little things, cleaning up text, issues with overwriting files, leaflet.
-* Any comments you have: I am worried that spending this much time on these assignments will give me very little time to work on the independent project.
+* Roughly how much time you spent on this HW: 10h
+* What gave you the most trouble: Leaflet is difficult, because it is different 
+* Any comments you have: Still not happy with how the distribution maps look, but I don't know how to improve them. 
 
 
 
@@ -65,7 +65,7 @@ justification.
 
 ### Write-Up
 
-```{r, fig.width=12, fig.height=6}
+```{r, fig.width=12, fig.height=6, echo=FALSE}
 # This function eliminates all non-alphanumeric characters and spaces and converts
 # all text to lower case:
 clean_text <- function(text){
@@ -95,9 +95,11 @@ location_and_vote$PNADER <- as.numeric(as.character(location_and_vote$PNADER))
 
 
 #Assign areas to those breakdowns 
-location_and_vote$favor <-  ifelse(location_and_vote$PBUSH >= 0.5, -1,
+location_and_vote$favor <-  ifelse(location_and_vote$PBUSH >= 0.5, -location_and_vote$PBUSH,
                                    ifelse(location_and_vote$PGORE + 
-                                            location_and_vote$PNADER >= 0.5, 1, 0))
+                                            location_and_vote$PNADER >= 0.5, 
+                                          location_and_vote$PGORE + 
+                                            location_and_vote$PNADER, 0))
 
 
 
@@ -106,7 +108,9 @@ ggplot(data=NULL) +
   geom_polygon(data=location_and_vote, aes(x=long, y=lat, group=group, fill=favor)) +
   geom_path(data=location_and_vote, aes(x=long, y=lat, group=group), col="black", size=0.05) +
   geom_path(data=US_state, aes(x=long, y=lat, group=group), col="black", size=0.1) +
-  scale_fill_gradient2(name = "", low ="red", high ="blue", mid ="white") +
+  scale_fill_gradient2(name = "Party Votes", low ="red", high ="blue", 
+                       mid ="white", breaks = c(0.75, 0.0, -0.75), 
+                       labels = c("Gore & Nader", "Split", "Bush")) +
   coord_map()
 
 
@@ -116,8 +120,7 @@ county_count <- US_county %>% distinct(subregion) %>%
 
 #Aggregate and sum, ignoring NAs, grouping by region 
 election_score_state <- aggregate(location_and_vote$favor, 
-                                  by=list(region=location_and_vote$region), 
-                                  FUN=sum, na.rm = TRUE)
+                                  by=list(region=location_and_vote$region), FUN=sum, na.rm = TRUE)
 
 #Creat a proportion of counties 
 election_score_state <- election_score_state %>% mutate(prop = x/county_count$count)
@@ -134,7 +137,9 @@ kable(election_score_state)
 
 ```
 
+The choropleth map above shows US voter behaviour in the 2000 presidential election. Blue states favored Gore and Nader, while red favored Bush, with white being relatively split (it should be noted that several are gray, these represent no data, likely coming from restructuring of counties since the election took place). I think it is interesting to see how few counties were split in their choice for president. 
 
+The table below the figure is a ranking of states from most heterogenous to least. This metric takes the proportion of voters, by county, voting for members of each party and combines them. This would result in values closest to 0 being most split. This was calculated by dividing the summed proportion of votes in each county by the number of counties. This tells you how heterogeneous the counties are. 
 
 
 
@@ -163,7 +168,7 @@ between the different ethnic groups.
 
 Here is some starter code:
 
-```{r}
+```{r, fig.width=12, fig.height=6, echo=FALSE}
 #Import the social explorer data
 census_2010 <- read.csv("VT_COUNTY_SE.csv", header=TRUE) %>% tbl_df()
 
@@ -176,7 +181,8 @@ census_2010 <- rename(census_2010, total_pop = `SE_T055_001`, white_alone = `SE_
 
                       
 #Select out only those that I am interested in 
-census_2010_race <- select(census_2010, Geo_NAME, Geo_QName, Geo_FIPS, total_pop, white_alone, 
+census_2010_race <- select(census_2010, Geo_NAME, Geo_QName, Geo_FIPS, Geo_TRACT, total_pop, 
+                           white_alone, 
                            black_alone, asian_alone, hawaii_pac_alone, other_alone, two_more, 
                            hisp_latino)
 
@@ -191,33 +197,33 @@ census_2010_race$other_prop <- census_2010_race$other_alone + census_2010_race$t
   census_2010_race$total_pop
 
 
-#Do the same thing we did for map_df. 
-VT$id <- rownames(VT@data)
-VT_points <- fortify(VT, region="id")
-VT_df <- inner_join(VT_points, VT@data, by="id")
-
-#Join race data and vermont_df 
-VT_df$GEOID <- as.numeric(as.character(VT_df$GEOID))
-VT_census <- left_join(VT_df, census_2010_race, by = c("GEOID" = "Geo_FIPS"))
-
-
 
 #make some maps, first, Hispanic 
 leaflet(VT) %>%
   addTiles() %>% 
-  addPolylines(color="black", weight=1) %>% 
+  addPolylines(color="bl", weight=1) %>% 
+  addLegend("bottomright", values = ~census_2010_race$hispanic_prop,
+            title = "Proportion Hispanic",
+            labFormat = labelFormat(prefix = ""),
+            opacity = 1, pal = colorNumeric("Blues", census_2010_race$hispanic_prop)) %>% 
   addPolygons(
     stroke = FALSE, fillOpacity = 0.5, smoothFactor = 0.5,
-    color = colorBin("Blues", VT_census$hispanic_prop)(VT_census$hispanic_prop)
+    color = ~colorQuantile("Blues", 
+                           census_2010_race$hispanic_prop)(census_2010_race$hispanic_prop)
   )
 
 #White
 leaflet(VT) %>%
   addTiles() %>% 
   addPolylines(color="black", weight=1) %>% 
+  addLegend("bottomright", values = ~census_2010_race$white_prop,
+            title = "Proportion White",
+            labFormat = labelFormat(prefix = ""),
+            opacity = 1, pal = colorNumeric("Blues", census_2010_race$white_prop)) %>% 
   addPolygons(
     stroke = FALSE, fillOpacity = 0.5, smoothFactor = 0.5,
-    color = colorBin("Blues", VT_census$white_prop)(VT_census$white_prop)
+    color = ~colorQuantile("Blues", 
+                           census_2010_race$white_prop)(census_2010_race$white_prop)
   )
 
 
@@ -225,9 +231,14 @@ leaflet(VT) %>%
 leaflet(VT) %>%
   addTiles() %>% 
   addPolylines(color="black", weight=1) %>% 
+  addLegend("bottomright", values = ~census_2010_race$black_prop,
+            title = "Proportion African American",
+            labFormat = labelFormat(prefix = ""),
+            opacity = 1, pal = colorNumeric("Blues", census_2010_race$black_prop)) %>% 
   addPolygons(
     stroke = FALSE, fillOpacity = 0.5, smoothFactor = 0.5,
-    color = colorBin("Blues", VT_census$black_prop)(VT_census$black_prop)
+    color = ~colorQuantile("Blues", 
+                           census_2010_race$black_prop)(census_2010_race$black_prop)
   )
 
 
@@ -235,27 +246,35 @@ leaflet(VT) %>%
 leaflet(VT) %>%
   addTiles() %>% 
   addPolylines(color="black", weight=1) %>% 
+  addLegend("bottomright", values = ~census_2010_race$apac_prop,
+            title = "Proportion Asian & P. Islander",
+            labFormat = labelFormat(prefix = ""),
+            opacity = 1, pal = colorNumeric("Blues", census_2010_race$apac_prop)) %>% 
   addPolygons(
     stroke = FALSE, fillOpacity = 0.5, smoothFactor = 0.5,
-    color = colorBin("Blues", VT_census$apac_prop)(VT_census$apac_prop)
+    color = ~colorQuantile("Blues", 
+                           census_2010_race$apac_prop)(census_2010_race$apac_prop)
   )
-
-
 
 #Other, including those of two or more races
 leaflet(VT) %>%
   addTiles() %>% 
   addPolylines(color="black", weight=1) %>% 
+  addLegend("bottomright", values = ~census_2010_race$other_prop,
+            title = "Proportion Other",
+            labFormat = labelFormat(prefix = ""),
+            opacity = 1, pal = colorNumeric("Blues", census_2010_race$other_prop)) %>% 
   addPolygons(
     stroke = FALSE, fillOpacity = 0.5, smoothFactor = 0.5,
-    color = colorBin("Blues", VT_census$other_prop)(VT_census$other_prop)
+    color = ~colorQuantile("Blues", 
+                           census_2010_race$other_prop)(census_2010_race$other_prop)
   )
-
 
 
 
 ```
 
+The maps above show the proportions of various races in Vermont, based on census information. While Vermont is the second whitest state in the union, it does have minority populations within its borders. Looking at the maps above, one can see minority populations are most dense near Vermont's cities of Burlington, Rutland, and the capital at Montpelier. As much of Vermont is now farmland because of the mass logging that took place two centuries ago, most of the state is rural. This combined with its geographic location in the north and lack of many large cities has contributed to its limited racial diversity. 
 
 ### Write-Up
 
